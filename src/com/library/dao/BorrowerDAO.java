@@ -1,144 +1,213 @@
 package com.library.dao;
 
-import java.sql.*;
+import com.library.model.Borrower;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
 public class BorrowerDAO {
-    private static final String URL = "jdbc:mysql://localhost:3306/library_system";
-    private static final String USER = "root";
-    private static final String PASSWORD = "kavih2530";
 
-    public void createBorrowing(Borrower b) {
-        String insertSql = "INSERT INTO borrowings (user_id, book_id, borrow_date, due_date, renewal_count) VALUES (?, ?, ?, ?, ?)";
-        String updateBookSql = "UPDATE books SET available_copies = available_copies - 1 WHERE book_id = ? AND available_copies > 0";
+    /**
+     * Creates a new loan record in the database.
+     * @param loan The Loan object to create.
+     * @return The Loan object with its auto-generated ID, or null if creation fails.
+     */
+    public Borrower createLoan(Borrower loan) {
+        String sql = "INSERT INTO loans (book_id, member_id, loan_date, due_date, renewed) VALUES (?, ?, ?, ?, ?)";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            pstmt.setInt(1, loan.getBookId());
+            pstmt.setInt(2, loan.getMemberId());
+            pstmt.setDate(3, java.sql.Date.valueOf(loan.getLoanDate()));
+            pstmt.setDate(4, java.sql.Date.valueOf(loan.getDueDate()));
+            pstmt.setBoolean(5, loan.isRenewed());
 
-        try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD)) {
-            conn.setAutoCommit(false);
-
-            try (PreparedStatement insertStmt = conn.prepareStatement(insertSql);
-                 PreparedStatement updateStmt = conn.prepareStatement(updateBookSql)) {
-
-                updateStmt.setInt(1, b.getBookId());
-                int rowsUpdated = updateStmt.executeUpdate();
-
-                if (rowsUpdated == 0) {
-                    System.out.println("❌ Book is not available.");
-                    conn.rollback();
-                    return;
+            int rowsAffected = pstmt.executeUpdate();
+            if (rowsAffected > 0) {
+                try (ResultSet generatedKeys = pstmt.getGeneratedKeys()) {
+                    if (generatedKeys.next()) {
+                        loan.setLoanId(generatedKeys.getInt(1));
+                        System.out.println("Loan created successfully with ID: " + loan.getLoanId());
+                        return loan;
+                    }
                 }
-
-                insertStmt.setInt(1, b.getUserId());
-                insertStmt.setInt(2, b.getBookId());
-                insertStmt.setDate(3, b.getBorrowDate());
-                insertStmt.setDate(4, b.getDueDate());
-                insertStmt.setBoolean(5, b.isRenewed());
-                insertStmt.executeUpdate();
-
-                conn.commit();
-                System.out.println("✅ Borrowing created and book availability updated.");
-            } catch (SQLException e) {
-                conn.rollback();
-                e.printStackTrace();
-            } finally {
-                conn.setAutoCommit(true);
             }
         } catch (SQLException e) {
+            System.err.println("Error creating loan: " + e.getMessage());
             e.printStackTrace();
+        }
+        return null;
+    }
+
+    /**
+     * Retrieves a loan by its ID.
+     * @param loanId The ID of the loan to retrieve.
+     * @return The Loan object, or null if not found.
+     */
+    public Borrower getLoanById(int loanId) {
+        String sql = "SELECT loan_id, book_id, member_id, loan_date, due_date, return_date, renewed FROM loans WHERE loan_id = ?";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, loanId);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    LocalDate returnDate = rs.getDate("return_date") != null ? rs.getDate("return_date").toLocalDate() : null;
+                    return new Borrower(
+                        rs.getInt("loan_id"),
+                        rs.getInt("book_id"),
+                        rs.getInt("member_id"),
+                        rs.getDate("loan_date").toLocalDate(),
+                        rs.getDate("due_date").toLocalDate(),
+                        returnDate,
+                        rs.getBoolean("renewed")
+                    );
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Error getting loan by ID: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    /**
+     * Retrieves all loans for a specific member.
+     * @param memberId The ID of the member.
+     * @return A list of Loan objects for the member.
+     */
+    public List<Borrower> getLoansByMemberId(int memberId) {
+        List<Borrower> loans = new ArrayList<>();
+        String sql = "SELECT loan_id, book_id, member_id, loan_date, due_date, return_date, renewed FROM loans WHERE member_id = ?";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, memberId);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    LocalDate returnDate = rs.getDate("return_date") != null ? rs.getDate("return_date").toLocalDate() : null;
+                    loans.add(new Borrower(
+                        rs.getInt("loan_id"),
+                        rs.getInt("book_id"),
+                        rs.getInt("member_id"),
+                        rs.getDate("loan_date").toLocalDate(),
+                        rs.getDate("due_date").toLocalDate(),
+                        returnDate,
+                        rs.getBoolean("renewed")
+                    ));
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Error getting loans by member ID: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return loans;
+    }
+
+    /**
+     * Retrieves active loans (not yet returned) for a specific member.
+     * @param memberId The ID of the member.
+     * @return A list of active Loan objects for the member.
+     */
+    public List<Borrower> getActiveLoansByMemberId(int memberId) {
+        List<Borrower> loans = new ArrayList<>();
+        String sql = "SELECT loan_id, book_id, member_id, loan_date, due_date, return_date, renewed FROM loans WHERE member_id = ? AND return_date IS NULL";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, memberId);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    loans.add(new Borrower(
+                        rs.getInt("loan_id"),
+                        rs.getInt("book_id"),
+                        rs.getInt("member_id"),
+                        rs.getDate("loan_date").toLocalDate(),
+                        rs.getDate("due_date").toLocalDate(),
+                        null, // return_date is null for active loans
+                        rs.getBoolean("renewed")
+                    ));
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Error getting active loans by member ID: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return loans;
+    }
+
+    /**
+     * Updates the return date of a loan.
+     * @param loanId The ID of the loan to update.
+     * @param returnDate The date the book was returned.
+     * @return true if updated successfully, false otherwise.
+     */
+    public boolean updateLoanReturnDate(int loanId, LocalDate returnDate) {
+        String sql = "UPDATE loans SET return_date = ? WHERE loan_id = ?";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setDate(1, java.sql.Date.valueOf(returnDate));
+            pstmt.setInt(2, loanId);
+            int rowsAffected = pstmt.executeUpdate();
+            return rowsAffected > 0;
+        } catch (SQLException e) {
+            System.err.println("Error updating loan return date: " + e.getMessage());
+            e.printStackTrace();
+            return false;
         }
     }
 
-    public void updateBorrowingReturnDate(int borrowingId, LocalDate returnDate) {
-        String updateReturnSql = "UPDATE borrowings SET return_date = ? WHERE borrowing_id = ?";
-        String updateBookSql = "UPDATE books SET available_copies = available_copies + 1 WHERE book_id = (SELECT book_id FROM borrowings WHERE borrowing_id = ?)";
-
-        try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD)) {
-            conn.setAutoCommit(false);
-
-            try (PreparedStatement updateReturnStmt = conn.prepareStatement(updateReturnSql);
-                 PreparedStatement updateBookStmt = conn.prepareStatement(updateBookSql)) {
-
-                updateReturnStmt.setDate(1, Date.valueOf(returnDate));
-                updateReturnStmt.setInt(2, borrowingId);
-                int rows = updateReturnStmt.executeUpdate();
-
-                if (rows > 0) {
-                    updateBookStmt.setInt(1, borrowingId);
-                    updateBookStmt.executeUpdate();
-                    conn.commit();
-                    System.out.println("✅ Returned successfully and availability updated.");
-                } else {
-                    conn.rollback();
-                    System.out.println("❌ Borrowing not found.");
-                }
-            } catch (SQLException e) {
-                conn.rollback();
-                e.printStackTrace();
-            } finally {
-                conn.setAutoCommit(true);
-            }
+    /**
+     * Updates the due date and sets the renewed status of a loan.
+     * @param loanId The ID of the loan to update.
+     * @param newDueDate The new due date after renewal.
+     * @return true if updated successfully, false otherwise.
+     */
+    public boolean updateLoanRenewedStatus(int loanId, LocalDate newDueDate) {
+        String sql = "UPDATE loans SET due_date = ?, renewed = TRUE WHERE loan_id = ?";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setDate(1, java.sql.Date.valueOf(newDueDate));
+            pstmt.setInt(2, loanId);
+            int rowsAffected = pstmt.executeUpdate();
+            return rowsAffected > 0;
         } catch (SQLException e) {
+            System.err.println("Error updating loan renewed status: " + e.getMessage());
             e.printStackTrace();
+            return false;
         }
     }
 
-    public void updateBorrowingRenewedStatus(int borrowingId) {
-        String selectSql = "SELECT due_date FROM borrowings WHERE borrowing_id = ?";
-        String updateSql = "UPDATE borrowings SET due_date = ?, renewal_count = true WHERE borrowing_id = ?";
-
-        try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);
-             PreparedStatement selectStmt = conn.prepareStatement(selectSql)) {
-
-            selectStmt.setInt(1, borrowingId);
-            ResultSet rs = selectStmt.executeQuery();
-
-            if (rs.next()) {
-                Date dueDateSql = rs.getDate("due_date");
-                if (dueDateSql == null) {
-                    System.out.println("❌ Current due date is null. Cannot renew.");
-                    return;
+    /**
+     * Retrieves all active loans that are overdue.
+     * @param currentDate The current date to check overdue against.
+     * @return A list of overdue Loan objects.
+     */
+    public List<Borrower> getOverdueLoans(LocalDate currentDate) {
+        List<Borrower> overdueLoans = new ArrayList<>();
+        String sql = "SELECT loan_id, book_id, member_id, loan_date, due_date, return_date, renewed FROM loans WHERE return_date IS NULL AND due_date < ?";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setDate(1, java.sql.Date.valueOf(currentDate));
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    overdueLoans.add(new Borrower(
+                        rs.getInt("loan_id"),
+                        rs.getInt("book_id"),
+                        rs.getInt("member_id"),
+                        rs.getDate("loan_date").toLocalDate(),
+                        rs.getDate("due_date").toLocalDate(),
+                        null, // return_date is null for active overdue loans
+                        rs.getBoolean("renewed")
+                    ));
                 }
-                LocalDate currentDueDate = dueDateSql.toLocalDate();
-                LocalDate newDueDate = currentDueDate.plusDays(3);
-
-                try (PreparedStatement updateStmt = conn.prepareStatement(updateSql)) {
-                    updateStmt.setDate(1, Date.valueOf(newDueDate));
-                    updateStmt.setInt(2, borrowingId);
-                    int rows = updateStmt.executeUpdate();
-                    System.out.println(rows > 0 ? "✅ Renewed for 3 more days." : "❌ Update failed.");
-                }
-            } else {
-                System.out.println("❌ Borrowing not found.");
             }
         } catch (SQLException e) {
+            System.err.println("Error getting overdue loans: " + e.getMessage());
             e.printStackTrace();
         }
-    }
-
-    public List<Borrower> getOverdueBorrowings() {
-        List<Borrower> list = new ArrayList<>();
-        String sql = "SELECT * FROM borrowings WHERE return_date IS NULL AND due_date < CURDATE()";
-
-        try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);
-             PreparedStatement stmt = conn.prepareStatement(sql);
-             ResultSet rs = stmt.executeQuery()) {
-
-            while (rs.next()) {
-                Borrower b = new Borrower(
-                    rs.getInt("borrowing_id"),
-                    rs.getInt("user_id"),
-                    rs.getInt("book_id"),
-                    rs.getDate("borrow_date"),
-                    rs.getDate("due_date"),
-                    rs.getDate("return_date"),
-                    rs.getBoolean("renewal_count")
-                );
-                list.add(b);
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        return list;
+        return overdueLoans;
     }
 }
