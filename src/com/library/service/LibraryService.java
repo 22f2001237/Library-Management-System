@@ -1,10 +1,10 @@
 package com.library.service;
 
 import com.library.dao.BookDAO;
-import com.library.dao.LoanDAO;
+import com.library.dao.BorrowerDAO;
 import com.library.dao.MemberDAO;
 import com.library.model.Book;
-import com.library.model.Loan;
+import com.library.model.Borrower;
 import com.library.model.Member;
 
 import java.time.LocalDate;
@@ -19,13 +19,12 @@ public class LibraryService {
 
     private BookDAO bookDAO;
     private MemberDAO memberDAO;
-    private LoanDAO loanDAO;
+    private BorrowerDAO borrowerDAO;
 
-    // Constructor for dependency injection
-    public LibraryService(BookDAO bookDAO, MemberDAO memberDAO, LoanDAO loanDAO) {
+    public LibraryService(BookDAO bookDAO, MemberDAO memberDAO, BorrowerDAO borrowerDAO) {
         this.bookDAO = bookDAO;
         this.memberDAO = memberDAO;
-        this.loanDAO = loanDAO;
+        this.borrowerDAO = borrowerDAO;
     }
 
     // --- User Actions ---
@@ -54,7 +53,7 @@ public class LibraryService {
             return false;
         }
 
-        List<Loan> activeLoans = loanDAO.getActiveLoansByMemberId(memberId);
+        List<Borrower> activeLoans = borrowerDAO.getActiveLoansByMemberId(memberId);
         if (activeLoans.size() >= MAX_BORROWED_BOOKS) {
             System.out.println("Error: Member " + member.getFirstName() + " has reached the maximum limit of " + MAX_BORROWED_BOOKS + " borrowed books.");
             return false;
@@ -62,40 +61,40 @@ public class LibraryService {
 
         LocalDate loanDate = LocalDate.now();
         LocalDate dueDate = loanDate.plusDays(INITIAL_LOAN_DAYS);
-        Loan newLoan = new Loan(bookId, memberId, loanDate, dueDate);
+        Borrower newBorrowerEntry = new Borrower(bookId, memberId, loanDate, dueDate);
 
-        if (loanDAO.createLoan(newLoan) != null) {
+        if (borrowerDAO.createLoan(newBorrowerEntry) != null) {
             bookDAO.updateBookCopies(bookId, -1); // Decrement available copies
             System.out.println("Book '" + book.getTitle() + "' borrowed successfully by " + member.getFirstName() + ".");
             System.out.println("Due date: " + dueDate);
             return true;
         }
-        System.out.println("Failed to create loan record.");
+        System.out.println("Failed to create borrower entry.");
         return false;
     }
 
     /**
      * Allows a member to return a book.
-     * @param loanId The ID of the loan to return.
+     * @param loanId The ID of the loan (now borrower entry) to return.
      * @return The fine amount if any, otherwise 0.0.
      */
     public double returnBook(int loanId) {
-        Loan loan = loanDAO.getLoanById(loanId);
-        if (loan == null) {
-            System.out.println("Error: Loan with ID " + loanId + " not found.");
+        Borrower borrowerEntry = borrowerDAO.getLoanById(loanId);
+        if (borrowerEntry == null) {
+            System.out.println("Error: Borrower entry with ID " + loanId + " not found.");
             return 0.0;
         }
-        if (loan.getReturnDate() != null) {
-            System.out.println("Book for loan ID " + loanId + " has already been returned.");
-            return loan.calculateFine(loan.getReturnDate()); // Return previously calculated fine
+        if (borrowerEntry.getReturnDate() != null) {
+            System.out.println("Book for borrower entry ID " + loanId + " has already been returned.");
+            return borrowerEntry.calculateFine(borrowerEntry.getReturnDate());
         }
 
         LocalDate returnDate = LocalDate.now();
-        double fine = loan.calculateFine(returnDate);
+        double fine = borrowerEntry.calculateFine(returnDate);
 
-        if (loanDAO.updateLoanReturnDate(loanId, returnDate)) {
-            bookDAO.updateBookCopies(loan.getBookId(), 1); // Increment available copies
-            System.out.println("Book for loan ID " + loanId + " returned successfully.");
+        if (borrowerDAO.updateLoanReturnDate(loanId, returnDate)) {
+            bookDAO.updateBookCopies(borrowerEntry.getBookId(), 1);
+            System.out.println("Book for borrower entry ID " + loanId + " returned successfully.");
             if (fine > 0) {
                 System.out.println("Fine for overdue: Rs. " + fine);
             } else {
@@ -103,41 +102,36 @@ public class LibraryService {
             }
             return fine;
         }
-        System.out.println("Failed to update loan return date.");
+        System.out.println("Failed to update borrower entry return date.");
         return 0.0;
     }
 
     /**
      * Allows a member to renew a book.
-     * @param loanId The ID of the loan to renew.
+     * @param loanId The ID of the loan (borrower entry) to renew.
      * @return true if renewed successfully, false otherwise.
      */
     public boolean renewBook(int loanId) {
-        Loan loan = loanDAO.getLoanById(loanId);
-        if (loan == null) {
-            System.out.println("Error: Loan with ID " + loanId + " not found.");
+        Borrower borrowerEntry = borrowerDAO.getLoanById(loanId);
+        if (borrowerEntry == null) {
+            System.out.println("Error: Borrower entry with ID " + loanId + " not found.");
             return false;
         }
-        if (loan.getReturnDate() != null) {
+        if (borrowerEntry.getReturnDate() != null) {
             System.out.println("Error: Cannot renew a book that has already been returned.");
             return false;
         }
-        if (loan.isRenewed()) {
+        if (borrowerEntry.isRenewed()) {
             System.out.println("Error: This book has already been renewed once.");
             return false;
         }
-        // Optional: Can add a check if the book is overdue before renewal
-        // if (LocalDate.now().isAfter(loan.getDueDate())) {
-        //     System.out.println("Error: Cannot renew an overdue book. Please return it first.");
-        //     return false;
-        // }
 
-        LocalDate newDueDate = loan.getDueDate().plusDays(RENEWAL_DAYS);
-        if (loanDAO.updateLoanRenewedStatus(loanId, newDueDate)) {
-            System.out.println("Book for loan ID " + loanId + " renewed successfully. New due date: " + newDueDate);
+        LocalDate newDueDate = borrowerEntry.getDueDate().plusDays(RENEWAL_DAYS);
+        if (borrowerDAO.updateLoanRenewedStatus(loanId, newDueDate)) {
+            System.out.println("Book for borrower entry ID " + loanId + " renewed successfully. New due date: " + newDueDate);
             return true;
         }
-        System.out.println("Failed to renew book for loan ID " + loanId + ".");
+        System.out.println("Failed to renew book for borrower entry ID " + loanId + ".");
         return false;
     }
 
@@ -156,10 +150,10 @@ public class LibraryService {
     /**
      * Gets all books currently borrowed by a specific member.
      * @param memberId The ID of the member.
-     * @return A list of Loan objects representing borrowed books.
+     * @return A list of Borrower objects representing borrowed books.
      */
-    public List<Loan> getBorrowedBooks(int memberId) {
-        return loanDAO.getActiveLoansByMemberId(memberId);
+    public List<Borrower> getBorrowedBooks(int memberId) {
+        return borrowerDAO.getActiveLoansByMemberId(memberId);
     }
 
     /**
@@ -168,18 +162,18 @@ public class LibraryService {
      * @return The total fine amount.
      */
     public double getMemberFineDetails(int memberId) {
-        List<Loan> activeLoans = loanDAO.getActiveLoansByMemberId(memberId);
+        List<Borrower> activeLoans = borrowerDAO.getActiveLoansByMemberId(memberId);
         double totalFine = 0.0;
         LocalDate currentDate = LocalDate.now();
 
         System.out.println("\n--- Fine Details for Member ID: " + memberId + " ---");
-        for (Loan loan : activeLoans) {
-            double fine = loan.calculateFine(currentDate);
+        for (Borrower borrowerEntry : activeLoans) {
+            double fine = borrowerEntry.calculateFine(currentDate);
             if (fine > 0) {
-                Book book = bookDAO.getBookById(loan.getBookId());
-                System.out.println("  Loan ID: " + loan.getLoanId() +
+                Book book = bookDAO.getBookById(borrowerEntry.getBookId());
+                System.out.println("  Borrower Entry ID: " + borrowerEntry.getLoanId() +
                                    ", Book: " + (book != null ? book.getTitle() : "Unknown") +
-                                   ", Due Date: " + loan.getDueDate() +
+                                   ", Due Date: " + borrowerEntry.getDueDate() +
                                    ", Overdue Fine: Rs. " + fine);
                 totalFine += fine;
             }
@@ -200,6 +194,15 @@ public class LibraryService {
     }
 
     /**
+     * Adds a new member to the library system (Librarian feature).
+     * @param member The Member object to add.
+     * @return true if added successfully, false otherwise.
+     */
+    public boolean addMember(Member member) { // THIS IS THE NEW METHOD
+        return memberDAO.addMember(member) != null;
+    }
+
+    /**
      * Checks the status of a user (Librarian feature).
      * @param memberId The ID of the member.
      */
@@ -214,20 +217,21 @@ public class LibraryService {
         System.out.println("Phone: " + (member.getPhoneNumber() != null ? member.getPhoneNumber() : "N/A"));
         System.out.println("Joined: " + member.getJoinDate());
 
-        List<Loan> activeLoans = loanDAO.getActiveLoansByMemberId(memberId);
+        List<Borrower> activeLoans = borrowerDAO.getActiveLoansByMemberId(memberId);
         System.out.println("\nBooks Borrowed (" + activeLoans.size() + "/" + MAX_BORROWED_BOOKS + "):");
         if (activeLoans.isEmpty()) {
             System.out.println("  No books currently borrowed.");
         } else {
-            activeLoans.forEach(loan -> {
-                Book book = bookDAO.getBookById(loan.getBookId());
-                System.out.println("  - Loan ID: " + loan.getLoanId() +
+            activeLoans.forEach(borrowerEntry -> {
+                Book book = bookDAO.getBookById(borrowerEntry.getBookId());
+                Member currentMember = memberDAO.getMemberById(borrowerEntry.getMemberId()); // Renamed variable to avoid conflict
+                System.out.println("  - Borrower Entry ID: " + borrowerEntry.getLoanId() +
                                    ", Book: " + (book != null ? book.getTitle() : "Unknown") +
-                                   ", Due Date: " + loan.getDueDate() +
-                                   ", Renewed: " + (loan.isRenewed() ? "Yes" : "No"));
+                                   ", Due Date: " + borrowerEntry.getDueDate() +
+                                   ", Renewed: " + (borrowerEntry.isRenewed() ? "Yes" : "No"));
             });
         }
-        getMemberFineDetails(memberId); // This will print fine details
+        getMemberFineDetails(memberId);
     }
 
     /**
@@ -244,17 +248,15 @@ public class LibraryService {
      * @return true if deleted successfully, false otherwise.
      */
     public boolean deleteBook(int bookId) {
-        // Before deleting, consider checking if there are any active loans for this book
-        // This logic can be added here or in the DAO. For simplicity, assuming no active loans.
         return bookDAO.deleteBook(bookId);
     }
 
     /**
      * Gets a report of all overdue loans (Librarian feature).
-     * @return A list of overdue Loan objects.
+     * @return A list of overdue Borrower objects.
      */
-    public List<Loan> getOverdueLoansReport() {
+    public List<Borrower> getOverdueLoansReport() {
         LocalDate currentDate = LocalDate.now();
-        return loanDAO.getOverdueLoans(currentDate);
+        return borrowerDAO.getOverdueLoans(currentDate);
     }
 }
