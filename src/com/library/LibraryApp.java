@@ -1,8 +1,11 @@
+// src/com/library/LibraryApp.java
+
 package com.library;
 
 import com.library.dao.BookDAO;
 import com.library.dao.BorrowerDAO;
 import com.library.dao.MemberDAO;
+import com.library.dao.UserDAO; // New Import
 import com.library.model.Book;
 import com.library.model.Borrower;
 import com.library.model.Member;
@@ -17,6 +20,7 @@ public class LibraryApp {
     private static BookDAO bookDAO;
     private static MemberDAO memberDAO;
     private static BorrowerDAO borrowerDAO;
+    private static UserDAO userDAO; // New static field
     private static LibraryService libraryService;
     private static Scanner scanner = new Scanner(System.in);
 
@@ -24,7 +28,8 @@ public class LibraryApp {
         bookDAO = new BookDAO();
         memberDAO = new MemberDAO();
         borrowerDAO = new BorrowerDAO();
-        libraryService = new LibraryService(bookDAO, memberDAO, borrowerDAO);
+        userDAO = new UserDAO(); // Initialize the new DAO
+        libraryService = new LibraryService(bookDAO, memberDAO, borrowerDAO, userDAO); // Pass userDAO to service
 
         while (true) {
             printMainMenu();
@@ -35,7 +40,18 @@ public class LibraryApp {
                     userMenu();
                     break;
                 case 2:
-                    librarianMenu();
+                    // Authenticate librarian before showing librarian menu
+                    System.out.println("\n--- Librarian Login ---");
+                    System.out.print("Username: ");
+                    String username = scanner.nextLine();
+                    System.out.print("Password: ");
+                    String password = scanner.nextLine();
+
+                    if (libraryService.authenticateUser(username, password, "librarian")) {
+                        librarianMenu(); // Only show menu if authenticated
+                    } else {
+                        System.out.println("Access denied for Librarian actions.");
+                    }
                     break;
                 case 3:
                     System.out.println("Exiting Library System. Goodbye!");
@@ -47,6 +63,8 @@ public class LibraryApp {
         }
     }
 
+    // ... (userMenu and librarianMenu methods are here, they are unchanged from the previous version,
+    //      except for the display books part in userMenu, which is above this code block)
     private static void printMainMenu() {
         System.out.println("\n--- Library System ---");
         System.out.println("1. User Actions");
@@ -81,6 +99,14 @@ public class LibraryApp {
 
             switch (choice) {
                 case 1:
+                    System.out.println("\n--- Available Books ---");
+                    List<Book> availableBooksForBorrow = libraryService.getAllAvailableBooks(); // Get all available books
+                    if (availableBooksForBorrow.isEmpty()) {
+                        System.out.println("No books are currently available to borrow.");
+                        break; // Exit this case and go back to user menu
+                    }
+                    availableBooksForBorrow.forEach(System.out::println); // Display the list
+
                     System.out.print("Enter Member ID: ");
                     int memberIdBorrow = getUserChoice();
                     System.out.print("Enter Book ID to borrow: ");
@@ -142,12 +168,12 @@ public class LibraryApp {
         while (true) {
             System.out.println("\n--- Librarian Menu ---");
             System.out.println("1. Add New Book");
-            System.out.println("2. Add New Member"); 
+            System.out.println("2. Add New Member");
             System.out.println("3. Check User Status");
             System.out.println("4. View All Available Books");
             System.out.println("5. View All Overdue Borrower Entries");
             System.out.println("6. Delete Book");
-            System.out.println("7. Back to Main Menu"); 
+            System.out.println("7. Back to Main Menu");
             System.out.print("Enter your choice: ");
             int choice = getUserChoice();
 
@@ -167,7 +193,7 @@ public class LibraryApp {
                     Book newBook = new Book(title, author, isbn, pubYear, totalCopies, totalCopies);
                     libraryService.addBook(newBook);
                     break;
-                case 2: 
+                case 2:
                     System.out.println("--- Add New Member ---");
                     System.out.print("First Name: ");
                     String firstName = scanner.nextLine();
@@ -178,18 +204,18 @@ public class LibraryApp {
                     System.out.print("Phone Number (optional, press Enter to skip): ");
                     String phoneNumber = scanner.nextLine();
                     Member newMember = new Member(firstName, lastName, email, phoneNumber.isEmpty() ? null : phoneNumber, LocalDate.now());
-                    if (libraryService.addMember(newMember)) { // Call the new addMember method in LibraryService
+                    if (libraryService.addMember(newMember)) {
                         System.out.println("Member added successfully! Member ID: " + newMember.getMemberId());
                     } else {
                         System.out.println("Failed to add member. Email might already exist.");
                     }
                     break;
-                case 3: 
+                case 3:
                     System.out.print("Enter Member ID to check status: ");
                     int memberIdStatus = getUserChoice();
                     libraryService.getMemberStatus(memberIdStatus);
                     break;
-                case 4: 
+                case 4:
                     List<Book> allAvailableBooks = libraryService.getAllAvailableBooks();
                     if (allAvailableBooks.isEmpty()) {
                         System.out.println("No books currently available in the library.");
@@ -198,7 +224,7 @@ public class LibraryApp {
                         allAvailableBooks.forEach(System.out::println);
                     }
                     break;
-                case 5: 
+                case 5:
                     List<Borrower> overdueLoans = libraryService.getOverdueLoansReport();
                     if (overdueLoans.isEmpty()) {
                         System.out.println("No overdue borrower entries found.");
@@ -215,7 +241,7 @@ public class LibraryApp {
                         });
                     }
                     break;
-                case 6: 
+                case 6:
                     System.out.print("Enter Book ID to delete: ");
                     int bookIdDelete = getUserChoice();
                     if (libraryService.deleteBook(bookIdDelete)) {
@@ -224,8 +250,8 @@ public class LibraryApp {
                         System.out.println("Failed to delete book. It might not exist or has active loans.");
                     }
                     break;
-                case 7: 
-                    return; 
+                case 7:
+                    return; // Back to main menu
                 default:
                     System.out.println("Invalid choice. Please try again.");
             }
