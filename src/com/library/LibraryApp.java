@@ -1,9 +1,9 @@
+// src/com/library/LibraryApp.java
 package com.library;
 
 import com.library.dao.BookDAO;
 import com.library.dao.BorrowerDAO;
 import com.library.dao.MemberDAO;
-// Removed UserDAO import
 import com.library.model.Book;
 import com.library.model.Borrower;
 import com.library.model.Member;
@@ -18,7 +18,6 @@ public class LibraryApp {
     private static BookDAO bookDAO;
     private static MemberDAO memberDAO;
     private static BorrowerDAO borrowerDAO;
-    // Removed private static UserDAO userDAO;
     private static LibraryService libraryService;
     private static Scanner scanner = new Scanner(System.in);
 
@@ -26,7 +25,6 @@ public class LibraryApp {
         bookDAO = new BookDAO();
         memberDAO = new MemberDAO();
         borrowerDAO = new BorrowerDAO();
-        // Removed userDAO = new UserDAO();
         libraryService = new LibraryService(bookDAO, memberDAO, borrowerDAO);
 
         while (true) {
@@ -78,8 +76,8 @@ public class LibraryApp {
             System.out.println("4. Check Book Availability");
             System.out.println("5. View Borrowed Books");
             System.out.println("6. Check My Fine Details");
-            System.out.println("7. Pay Fines"); // NEW OPTION
-            System.out.println("8. Back to Main Menu"); // Shifted from 7 to 8
+            System.out.println("7. Pay Fines");
+            System.out.println("8. Back to Main Menu");
             System.out.print("Enter your choice: ");
             int choice = getUserChoice();
 
@@ -128,7 +126,7 @@ public class LibraryApp {
                                                ", Due Date: " + borrowerEntry.getDueDate() +
                                                ", Renewed: " + (borrowerEntry.isRenewed() ? "Yes" : "No") +
                                                ", Fine: Rs. " + String.format("%.2f", borrowerEntry.getFineAmount()) +
-                                               ", Paid: " + (borrowerEntry.isFinePaid() ? "Yes" : "No")); // Display fine details
+                                               ", Paid: " + (borrowerEntry.isFinePaid() ? "Yes" : "No"));
                         });
                     }
                     break;
@@ -137,12 +135,12 @@ public class LibraryApp {
                     int memberIdFine = getUserChoice();
                     libraryService.getMemberFineDetails(memberIdFine);
                     break;
-                case 7: // NEW CASE FOR PAYING FINES
+                case 7:
                     System.out.print("Enter your Member ID to pay fines: ");
                     int memberIdPayFine = getUserChoice();
                     libraryService.payFines(memberIdPayFine);
                     break;
-                case 8: // Shifted from 7 to 8
+                case 8:
                     return; // Back to main menu
                 default:
                     System.out.println("Invalid choice. Please try again.");
@@ -157,8 +155,9 @@ public class LibraryApp {
             System.out.println("2. Check User Status");
             System.out.println("3. View All Available Books");
             System.out.println("4. View All Overdue Borrower Entries");
-            System.out.println("5. Delete Book");
-            System.out.println("6. Back to Main Menu");
+            System.out.println("5. View All Members with Fines"); // NEW OPTION
+            System.out.println("6. Delete Book"); // Shifted from 5 to 6
+            System.out.println("7. Back to Main Menu"); // Shifted from 6 to 7
             System.out.print("Enter your choice: ");
             int choice = getUserChoice();
 
@@ -206,11 +205,14 @@ public class LibraryApp {
                                                ", Member: " + (member != null ? member.getFirstName() + " " + member.getLastName() : "Unknown") +
                                                ", Due Date: " + borrowerEntry.getDueDate() +
                                                ", Fine: Rs. " + String.format("%.2f", borrowerEntry.getFineAmount()) +
-                                               ", Paid: " + (borrowerEntry.isFinePaid() ? "Yes" : "No")); // Display fine details
+                                               ", Paid: " + (borrowerEntry.isFinePaid() ? "Yes" : "No"));
                         });
                     }
                     break;
-                case 5:
+                case 5: // NEW CASE FOR VIEWING ALL MEMBERS WITH FINES
+                    libraryService.viewAllMembersWithFines();
+                    break;
+                case 6: // Shifted from 5 to 6
                     System.out.print("Enter Book ID to delete: ");
                     int bookIdDelete = getUserChoice();
                     if (libraryService.deleteBook(bookIdDelete)) {
@@ -219,7 +221,7 @@ public class LibraryApp {
                         System.out.println("Failed to delete book. It might not exist or has active loans.");
                     }
                     break;
-                case 6:
+                case 7: // Shifted from 6 to 7
                     return; // Back to main menu
                 default:
                     System.out.println("Invalid choice. Please try again.");

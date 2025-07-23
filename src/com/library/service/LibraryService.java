@@ -3,16 +3,14 @@ package com.library.service;
 import com.library.dao.BookDAO;
 import com.library.dao.BorrowerDAO;
 import com.library.dao.MemberDAO;
-// Removed UserDAO import as per previous revert
 import com.library.model.Book;
 import com.library.model.Borrower;
 import com.library.model.Member;
-// Removed User model import as per previous revert
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
-import java.util.Optional; // Keep Optional for safer stream operations
 
 public class LibraryService {
 
@@ -23,9 +21,7 @@ public class LibraryService {
     private BookDAO bookDAO;
     private MemberDAO memberDAO;
     private BorrowerDAO borrowerDAO;
-    // Removed private UserDAO userDAO; // Reverted
 
-    // Reverted constructor signature
     public LibraryService(BookDAO bookDAO, MemberDAO memberDAO, BorrowerDAO borrowerDAO) {
         this.bookDAO = bookDAO;
         this.memberDAO = memberDAO;
@@ -64,9 +60,6 @@ public class LibraryService {
             return false;
         }
 
-        // --- Re-added logic: Prevent borrowing same book if there's an active loan for it ---
-        // This was previously removed during the revert, but it's a crucial logical check
-        // to prevent a member from borrowing the *same* book they already have out.
         Optional<Borrower> existingActiveLoan = activeLoans.stream()
             .filter(loan -> loan.getBookId() == bookId)
             .findFirst();
@@ -76,15 +69,13 @@ public class LibraryService {
             System.out.println("Please return the current copy before borrowing it again.");
             return false;
         }
-        // --- END Re-added logic ---
 
         LocalDate loanDate = LocalDate.now();
         LocalDate dueDate = loanDate.plusDays(INITIAL_LOAN_DAYS);
-        // Fine amount and paid status are initialized to 0.00 and false in Borrower constructor
         Borrower newBorrowerEntry = new Borrower(bookId, memberId, loanDate, dueDate);
 
         if (borrowerDAO.createLoan(newBorrowerEntry) != null) {
-            bookDAO.updateBookCopies(bookId, -1); // Decrement available copies
+            bookDAO.updateBookCopies(bookId, -1);
             System.out.println("Book '" + book.getTitle() + "' borrowed successfully by " + member.getFirstName() + ".");
             System.out.println("Due date: " + dueDate);
             return true;
@@ -99,7 +90,7 @@ public class LibraryService {
      * @param loanId The ID of the loan to return.
      * @return The fine amount if any, otherwise 0.0.
      */
-    public double returnBook(int loanId) { // Original signature
+    public double returnBook(int loanId) {
         Borrower borrowerEntry = borrowerDAO.getLoanById(loanId);
         if (borrowerEntry == null) {
             System.out.println("Error: Borrower entry with ID " + loanId + " not found.");
@@ -107,24 +98,21 @@ public class LibraryService {
         }
         if (borrowerEntry.getReturnDate() != null) {
             System.out.println("Book for borrower entry ID " + loanId + " has already been returned.");
-            // If already returned, just report the fine that was already calculated and stored
             System.out.println("Fine previously incurred: Rs. " + String.format("%.2f", borrowerEntry.getFineAmount()));
             return borrowerEntry.getFineAmount();
         }
 
         LocalDate returnDate = LocalDate.now();
-        double calculatedFine = borrowerEntry.calculateFine(returnDate); // Calculate fine based on current date
+        double calculatedFine = borrowerEntry.calculateFine(returnDate);
 
-        // Update the loan record with return date, calculated fine, and fine_paid status (initially false)
-        if (borrowerDAO.updateLoanReturnDate(loanId, returnDate, calculatedFine, false)) { // Updated call
-            bookDAO.updateBookCopies(borrowerEntry.getBookId(), 1); // Increment available copies
+        if (borrowerDAO.updateLoanReturnDate(loanId, returnDate, calculatedFine, false)) {
+            bookDAO.updateBookCopies(borrowerEntry.getBookId(), 1);
 
-            // Update member's total_fine_due if a fine was incurred
             if (calculatedFine > 0) {
                 Member member = memberDAO.getMemberById(borrowerEntry.getMemberId());
                 if (member != null) {
                     double newTotalFineDue = member.getTotalFineDue() + calculatedFine;
-                    memberDAO.updateTotalFineDue(member.getMemberId(), newTotalFineDue); // Update member's total fine
+                    memberDAO.updateTotalFineDue(member.getMemberId(), newTotalFineDue);
                     System.out.println("Member's total fine due updated to Rs. " + String.format("%.2f", newTotalFineDue));
                 }
             }
@@ -146,7 +134,7 @@ public class LibraryService {
      * @param loanId The ID of the loan to renew.
      * @return true if renewed successfully, false otherwise.
      */
-    public boolean renewBook(int loanId) { // Original signature
+    public boolean renewBook(int loanId) {
         Borrower borrowerEntry = borrowerDAO.getLoanById(loanId);
         if (borrowerEntry == null) {
             System.out.println("Error: Borrower entry with ID " + loanId + " not found.");
@@ -160,11 +148,6 @@ public class LibraryService {
             System.out.println("Error: This book has already been renewed once.");
             return false;
         }
-        // Optional: Can add a check if the book is overdue before renewal
-        // if (LocalDate.now().isAfter(borrowerEntry.getDueDate())) {
-        //     System.out.println("Error: Cannot renew an overdue book. Please return it first.");
-        //     return false;
-        // }
 
         LocalDate newDueDate = borrowerEntry.getDueDate().plusDays(RENEWAL_DAYS);
         if (borrowerDAO.updateLoanRenewedStatus(loanId, newDueDate)) {
@@ -180,7 +163,7 @@ public class LibraryService {
      * @param memberId The ID of the member paying the fine.
      * @return true if fines were successfully processed/paid, false otherwise.
      */
-    public boolean payFines(int memberId) { // New method
+    public boolean payFines(int memberId) {
         Member member = memberDAO.getMemberById(memberId);
         if (member == null) {
             System.out.println("Error: Member with ID " + memberId + " not found.");
@@ -189,17 +172,15 @@ public class LibraryService {
 
         if (member.getTotalFineDue() <= 0) {
             System.out.println("Member " + member.getFirstName() + " has no outstanding fines.");
-            return true; // No fines to pay, so considered successful
+            return true;
         }
 
-        // Get all loans for this member, filter for those with unpaid fines
         List<Borrower> memberLoansWithUnpaidFines = borrowerDAO.getLoansByMemberId(memberId).stream()
             .filter(loan -> loan.getFineAmount() > 0 && !loan.isFinePaid())
             .collect(Collectors.toList());
 
         if (memberLoansWithUnpaidFines.isEmpty()) {
             System.out.println("Member " + member.getFirstName() + " has no individual loan fines outstanding, but total fine due is " + String.format("%.2f", member.getTotalFineDue()) + ". This might indicate a data inconsistency.");
-            // Attempt to reset total_fine_due if no individual loan fines are found but total is > 0
             if (member.getTotalFineDue() > 0) {
                 if (memberDAO.updateTotalFineDue(memberId, 0.00)) {
                     System.out.println("Total fine due for member " + member.getFirstName() + " reset to 0.00.");
@@ -214,14 +195,13 @@ public class LibraryService {
 
         boolean allFinesPaidSuccessfully = true;
         for (Borrower loan : memberLoansWithUnpaidFines) {
-            if (!borrowerDAO.updateFinePaidStatus(loan.getLoanId(), true)) { // Mark individual loan fine as paid
+            if (!borrowerDAO.updateFinePaidStatus(loan.getLoanId(), true)) {
                 allFinesPaidSuccessfully = false;
                 System.err.println("Failed to mark fine as paid for Borrower Entry ID: " + loan.getLoanId());
             }
         }
 
         if (allFinesPaidSuccessfully) {
-            // After marking all individual loan fines as paid, reset the member's total_fine_due
             if (memberDAO.updateTotalFineDue(memberId, 0.00)) {
                 System.out.println("All outstanding fines for " + member.getFirstName() + " (Rs. " + String.format("%.2f", member.getTotalFineDue()) + ") have been paid.");
                 return true;
@@ -319,7 +299,7 @@ public class LibraryService {
         System.out.println("Email: " + member.getEmail());
         System.out.println("Phone: " + (member.getPhoneNumber() != null ? member.getPhoneNumber() : "N/A"));
         System.out.println("Joined: " + member.getJoinDate());
-        System.out.println("Total Outstanding Fine: Rs. " + String.format("%.2f", member.getTotalFineDue())); // Display total fine from member table
+        System.out.println("Total Outstanding Fine: Rs. " + String.format("%.2f", member.getTotalFineDue()));
 
         List<Borrower> activeLoans = borrowerDAO.getActiveLoansByMemberId(memberId);
         System.out.println("\nBooks Borrowed (" + activeLoans.size() + "/" + MAX_BORROWED_BOOKS + "):");
@@ -334,8 +314,6 @@ public class LibraryService {
                                    ", Renewed: " + (borrowerEntry.isRenewed() ? "Yes" : "No"));
             });
         }
-        // No need to call getMemberFineDetails here, as we already displayed total and can list individual if needed
-        // getMemberFineDetails(memberId);
     }
 
     /**
@@ -345,6 +323,30 @@ public class LibraryService {
     public List<Book> getAllAvailableBooks() {
         return bookDAO.getAvailableBooks();
     }
+
+    /**
+     * Retrieves and displays a list of all members with their total outstanding fines.
+     * (Librarian feature)
+     */
+    public void viewAllMembersWithFines() { // NEW METHOD
+        List<Member> allMembers = memberDAO.getAllMembers();
+        if (allMembers.isEmpty()) {
+            System.out.println("No members registered in the system.");
+            return;
+        }
+
+        System.out.println("\n--- All Members and Outstanding Fines ---");
+        System.out.printf("%-10s %-25s %-15s%n", "Member ID", "Member Name", "Total Fine Due");
+        System.out.println("--------------------------------------------------");
+        for (Member member : allMembers) {
+            System.out.printf("%-10d %-25s Rs. %-15.2f%n",
+                              member.getMemberId(),
+                              member.getFirstName() + " " + member.getLastName(),
+                              member.getTotalFineDue());
+        }
+        System.out.println("--------------------------------------------------");
+    }
+
 
     /**
      * Deletes a book from the library (Librarian feature).
