@@ -27,6 +27,7 @@ public class BookDAO {
             pstmt.setString(3, book.getIsbn());
             pstmt.setInt(4, book.getPublicationYear());
             pstmt.setInt(5, book.getTotalCopies());
+            
             pstmt.setInt(6, book.getAvailableCopies());
 
             int rowsAffected = pstmt.executeUpdate();

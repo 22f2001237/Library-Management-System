@@ -1,4 +1,7 @@
+
 package com.library.dao;
+
+import com.library.model.Member;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -9,8 +12,6 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.library.model.Member;
-
 public class MemberDAO {
 
     /**
@@ -19,7 +20,8 @@ public class MemberDAO {
      * @return The Member object with its auto-generated ID, or null if insertion fails.
      */
     public Member addMember(Member member) {
-        String sql = "INSERT INTO members (first_name, last_name, email, phone_number, join_date) VALUES (?, ?, ?, ?, ?)";
+        // total_fine_due is added to the INSERT statement
+        String sql = "INSERT INTO members (first_name, last_name, email, phone_number, join_date, total_fine_due) VALUES (?, ?, ?, ?, ?, ?)";
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
 
@@ -28,6 +30,7 @@ public class MemberDAO {
             pstmt.setString(3, member.getEmail());
             pstmt.setString(4, member.getPhoneNumber());
             pstmt.setDate(5, java.sql.Date.valueOf(member.getJoinDate()));
+            pstmt.setDouble(6, member.getTotalFineDue()); // New: Set initial total fine due (0.00)
 
             int rowsAffected = pstmt.executeUpdate();
             if (rowsAffected > 0) {
@@ -52,7 +55,8 @@ public class MemberDAO {
      * @return The Member object, or null if not found.
      */
     public Member getMemberById(int memberId) {
-        String sql = "SELECT member_id, first_name, last_name, email, phone_number, join_date FROM members WHERE member_id = ?";
+        // total_fine_due is added to the SELECT statement
+        String sql = "SELECT member_id, first_name, last_name, email, phone_number, join_date, total_fine_due FROM members WHERE member_id = ?";
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
@@ -65,7 +69,8 @@ public class MemberDAO {
                         rs.getString("last_name"),
                         rs.getString("email"),
                         rs.getString("phone_number"),
-                        rs.getDate("join_date").toLocalDate()
+                        rs.getDate("join_date").toLocalDate(),
+                        rs.getDouble("total_fine_due") // New: Retrieve total fine due
                     );
                 }
             }
@@ -82,7 +87,8 @@ public class MemberDAO {
      * @return The Member object, or null if not found.
      */
     public Member getMemberByEmail(String email) {
-        String sql = "SELECT member_id, first_name, last_name, email, phone_number, join_date FROM members WHERE email = ?";
+        // total_fine_due is added to the SELECT statement
+        String sql = "SELECT member_id, first_name, last_name, email, phone_number, join_date, total_fine_due FROM members WHERE email = ?";
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
@@ -95,7 +101,8 @@ public class MemberDAO {
                         rs.getString("last_name"),
                         rs.getString("email"),
                         rs.getString("phone_number"),
-                        rs.getDate("join_date").toLocalDate()
+                        rs.getDate("join_date").toLocalDate(),
+                        rs.getDouble("total_fine_due") // New: Retrieve total fine due
                     );
                 }
             }
@@ -108,6 +115,7 @@ public class MemberDAO {
 
     /**
      * Updates an existing member's details in the database.
+     * total_fine_due is NOT updated here, it's handled by a separate method.
      * @param member The Member object with updated details.
      * @return true if updated successfully, false otherwise.
      */
@@ -137,7 +145,8 @@ public class MemberDAO {
      */
     public List<Member> getAllMembers() {
         List<Member> members = new ArrayList<>();
-        String sql = "SELECT member_id, first_name, last_name, email, phone_number, join_date FROM members";
+        // total_fine_due is added to the SELECT statement
+        String sql = "SELECT member_id, first_name, last_name, email, phone_number, join_date, total_fine_due FROM members";
         try (Connection conn = DatabaseConnection.getConnection();
              Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
@@ -149,7 +158,8 @@ public class MemberDAO {
                     rs.getString("last_name"),
                     rs.getString("email"),
                     rs.getString("phone_number"),
-                    rs.getDate("join_date").toLocalDate()
+                    rs.getDate("join_date").toLocalDate(),
+                    rs.getDouble("total_fine_due") // New: Retrieve total fine due
                 ));
             }
         } catch (SQLException e) {
@@ -157,6 +167,28 @@ public class MemberDAO {
             e.printStackTrace();
         }
         return members;
+    }
+
+    /**
+     * Updates the total_fine_due for a member.
+     * @param memberId The ID of the member.
+     * @param newTotalFineDue The new total fine amount for the member.
+     * @return true if updated successfully, false otherwise.
+     */
+    public boolean updateTotalFineDue(int memberId, double newTotalFineDue) { // New method
+        String sql = "UPDATE members SET total_fine_due = ? WHERE member_id = ?";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setDouble(1, newTotalFineDue);
+            pstmt.setInt(2, memberId);
+            int rowsAffected = pstmt.executeUpdate();
+            return rowsAffected > 0;
+        } catch (SQLException e) {
+            System.err.println("Error updating total fine due for member: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
     }
 
     /**
