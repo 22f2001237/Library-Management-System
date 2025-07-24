@@ -155,8 +155,7 @@ You need to create the database and tables in your MySQL server.
 
 ## Project Structure
 
-````
-
+```
 Library-Management-System/
 ├── src/
 │   └── com/
@@ -165,20 +164,21 @@ Library-Management-System/
 │           ├── model/                 // Data model (POJOs) for database entities
 │           │   ├── Book.java
 │           │   ├── Member.java
-│           │   └── Borrower.java      // Renamed from Loan.java
+│           │   ├── Borrower.java      // Represents a loan/borrower entry
+│           │   └── User.java          // NEW: For librarian/system users
 │           ├── dao/                   // Data Access Objects (JDBC interactions)
 │           │   ├── DatabaseConnection.java
 │           │   ├── BookDAO.java
 │           │   ├── MemberDAO.java
-│           │   └── BorrowerDAO.java   // Renamed from LoanDAO.java
+│           │   ├── BorrowerDAO.java   // DAO for borrower/loan entries
+│           │   └── UserDAO.java       // NEW: DAO for user authentication
 │           └── service/               // Business Logic Layer
 │               └── LibraryService.java
-├── lib/                               // Directory for external JARs (e.g., MySQL Connector/J)
-│   └── mysql-connector-j-8.x.x.jar
-├── README.md                          // This file
+├── lib/                               // Place your external JARs here
+│   └── mysql-connector-j-8.x.x.jar    // Example: Your MySQL JDBC Driver
+├── README.md                          // Project description, setup instructions, etc.
 ├── .gitignore                         // Specifies files/folders to be ignored by Git
-└── library\_db\_backup.sql              // (Optional) SQL dump of initial database schema and data
-
-````
+└── library_db_backup.sql              // Initial database schema & data (optional, but good for setup)
+```
 
 ---
